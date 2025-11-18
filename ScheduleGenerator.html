@@ -1,0 +1,403 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High School Football Schedule Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles to enhance the aesthetic */
+        :root {
+            --primary: #10B981; /* Emerald 500 */
+            --secondary: #1F2937; /* Gray 800 */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+        .schedule-card {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            background-color: white;
+        }
+        .matchup {
+            background-color: #f9fafb; /* Lighter background for matchups */
+            border-left: 4px solid var(--primary);
+            transition: transform 0.2s;
+        }
+        .matchup:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .btn-primary {
+            background-color: var(--primary);
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .btn-primary:hover {
+            background-color: #059669; /* Emerald 600 */
+        }
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8 min-h-screen flex items-start justify-center">
+
+    <div class="w-full max-w-4xl schedule-card p-6 md:p-10 rounded-xl">
+        <h1 class="text-3xl font-extrabold text-gray-900 mb-2">League Scheduler</h1>
+        <p class="text-gray-600 mb-6">Enter your team names (one team per line) to generate a balanced round-robin schedule.</p>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Team Input Area -->
+            <div class="lg:col-span-1">
+                <label for="teamNames" class="block text-sm font-medium text-gray-700 mb-2">List Team Names (e.g., Wildcats, Spartans, Eagles)</label>
+                <textarea id="teamNames" rows="10" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-gray-800" placeholder="North High Wildcats&#10;South High Spartans&#10;Eastside Eagles&#10;Westwood Wolves&#10;Central Chargers&#10;Riverdale Raiders">North High Wildcats
+Eatonville
+Fife
+Foss
+Orting
+Steilacoom
+Washington
+Clover Park
+Franklin Pierce</textarea>
+                <label for="startDate" class="block text-sm font-medium text-gray-700 mt-4 mb-2">Season Start Date (optional)</label>
+                <input type="date" id="startDate" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-gray-800">
+
+                <label for="numGames" class="block text-sm font-medium text-gray-700 mt-4 mb-2">Number of Regular Season Games</label>
+                <input type="number" id="numGames" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-gray-800" placeholder="e.g., 7" required min="1">
+
+                <label for="numPlayoffTeams" class="block text-sm font-medium text-gray-700 mt-4 mb-2">Number of Playoff Teams (optional)</label>
+                <input type="number" id="numPlayoffTeams" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 text-gray-800" placeholder="e.g., 4 or 8">
+
+                <button id="generateBtn" class="btn-primary w-full mt-4 py-3 rounded-lg font-semibold text-white">
+                    Generate Schedule
+                </button>
+
+                <div id="statusMessage" class="mt-4 text-center text-sm font-medium"></div>
+            </div>
+
+            <!-- Schedule Output Area -->
+            <div class="lg:col-span-2">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-gray-900">Generated Matchups</h2>
+                    <button id="exportBtn" class="btn-primary py-2 px-4 rounded-lg font-semibold text-white hidden">Export to CSV</button>
+                </div>
+                <div id="scheduleOutput" class="space-y-6">
+                    <p class="text-gray-500 italic">Enter your teams and click "Generate Schedule" to see the full season's matchups.</p>
+                </div>
+                <div id="playoffOutput" class="mt-8">
+                    <!-- Playoff schedule will be rendered here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const teamNamesInput = document.getElementById('teamNames');
+            const generateBtn = document.getElementById('generateBtn');
+            const exportBtn = document.getElementById('exportBtn');
+            const numGamesInput = document.getElementById('numGames');
+            const scheduleOutput = document.getElementById('scheduleOutput');
+            const playoffOutput = document.getElementById('playoffOutput');
+            const statusMessage = document.getElementById('statusMessage');
+            const startDateInput = document.getElementById('startDate');
+
+            let currentScheduleData = null; // To hold the generated schedule for export
+
+
+            // --- Core Scheduling Logic (Circle Method) ---
+            function generateRoundRobin(teams) {
+                const N = teams.length;
+                let schedule = [];
+
+                // If N is odd, add a 'BYE' team to make the total number of participants even.
+                const isOdd = N % 2 !== 0;
+                if (isOdd) {
+                    teams.push('BYE');
+                }
+                const P = teams.length; // Total participants (even number)
+                const rounds = P - 1;
+
+                // The fixed team (always in position 0 for the algorithm)
+                const fixedTeam = teams[0];
+                // The rotating teams array
+                let rotatingTeams = teams.slice(1);
+
+                for (let week = 0; week < rounds; week++) {
+                    const matchups = [];
+                    
+                    // 1. Fixed Team Matchup (Team 0 vs. the last team in the rotating list)
+                    const opponent = rotatingTeams[P - 2];
+                    
+                    // Assign Home/Away status, alternating Team 0's location each week for fairness
+                    let homeTeam, awayTeam;
+                    if (week % 2 === 0) {
+                        homeTeam = fixedTeam;
+                        awayTeam = opponent;
+                    } else {
+                        homeTeam = opponent;
+                        awayTeam = fixedTeam;
+                    }
+
+                    if (opponent !== 'BYE' && fixedTeam !== 'BYE') {
+                        matchups.push({ home: homeTeam, away: awayTeam, isBye: false });
+                    } else {
+                        // If there is a BYE, the other team gets the BYE.
+                        const byeTeam = (fixedTeam === 'BYE') ? opponent : fixedTeam;
+                        matchups.push({ bye: byeTeam, isBye: true });
+                    }
+
+
+                    // 2. Rotating Team Matchups (Pairing the rest of the list)
+                    const half = (P - 2) / 2;
+                    for (let i = 0; i < half; i++) {
+                        let teamA = rotatingTeams[i];
+                        let teamB = rotatingTeams[P - 3 - i];
+                        
+                        // Alternate home/away for the rotating teams based on the round number
+                        if (week % 2 === 0) {
+                            homeTeam = teamA;
+                            awayTeam = teamB;
+                        } else {
+                            homeTeam = teamB;
+                            awayTeam = teamA;
+                        }
+
+                        if (homeTeam !== 'BYE' && awayTeam !== 'BYE') {
+                            matchups.push({ home: homeTeam, away: awayTeam, isBye: false });
+                        } else {
+                            const byeTeam = (homeTeam === 'BYE') ? awayTeam : homeTeam;
+                            matchups.push({ bye: byeTeam, isBye: true });
+                        }
+                    }
+
+                    schedule.push(matchups);
+
+                    // 3. Rotate the Teams (clockwise)
+                    const last = rotatingTeams.pop();
+                    rotatingTeams.unshift(last);
+                }
+
+                // If a BYE team was added, remove it from the master list before returning the original teams.
+                if (isOdd) {
+                    teams.pop();
+                }
+
+                return { teams: teams, schedule: schedule };
+            }
+
+            // --- Rendering Logic for Regular Season ---
+            function renderSchedule(scheduleData) {
+                const { teams, schedule } = scheduleData;
+                const numGames = parseInt(numGamesInput.value, 10);
+                const startDate = startDateInput.value ? new Date(startDateInput.value + 'T00:00:00') : null; // Use T00:00:00 to avoid timezone issues
+                scheduleOutput.innerHTML = '';
+                playoffOutput.innerHTML = ''; // Clear previous playoff schedule
+                statusMessage.textContent = '';
+                exportBtn.classList.add('hidden'); // Hide export button initially
+
+                if (teams.length < 2) {
+                    statusMessage.textContent = 'Please enter at least 2 teams.';
+                    return;
+                }
+
+                const scheduleToRender = schedule.slice(0, numGames);
+
+                statusMessage.textContent = `Success! Generated a ${scheduleToRender.length}-week regular season for ${teams.length} teams.`;
+
+                exportBtn.classList.remove('hidden'); // Show export button
+                scheduleToRender.forEach((weekMatchups, index) => {
+                    const weekNum = index + 1;
+                    const weekDiv = document.createElement('div');
+                    weekDiv.className = 'week-block p-4 bg-white rounded-lg border border-gray-200';
+
+                    let weekHeader = `<h3 class="text-lg font-bold text-emerald-600 mb-3">Week ${weekNum}`;
+                    if (startDate) {
+                        const gameDate = new Date(startDate.getTime());
+                        gameDate.setDate(startDate.getDate() + (index * 7)); // Add 7 days for each week
+                        weekHeader += ` <span class="text-sm font-medium text-gray-500">- ${gameDate.toLocaleDateString()}</span>`;
+                    }
+                    weekDiv.innerHTML = `${weekHeader}</h3>`;
+
+                    weekMatchups.forEach(matchup => {
+                        const matchDiv = document.createElement('div');
+                        matchDiv.className = 'matchup p-3 mb-2 rounded-md';
+
+                        if (matchup.isBye) {
+                            matchDiv.innerHTML = `<span class="font-medium text-gray-700">${matchup.bye}</span> has a <span class="font-bold text-red-500">BYE</span>.`;
+                            matchDiv.style.borderLeftColor = '#F87171'; /* Red 400 for BYE */
+                        } else {
+                            matchDiv.innerHTML = `<span class="font-bold text-gray-800">${matchup.away}</span> at <span class="font-bold text-gray-800">${matchup.home}</span>`;
+                        }
+                        weekDiv.appendChild(matchDiv);
+                    });
+
+                    scheduleOutput.appendChild(weekDiv);
+                });
+            }
+
+            // --- Rendering Logic for Postseason ---
+            function renderPlayoffs(teams) {
+                const numPlayoffTeamsInput = document.getElementById('numPlayoffTeams');
+                let numPlayoffTeams = parseInt(numPlayoffTeamsInput.value, 10);
+
+                // Validate the number of playoff teams
+                if (isNaN(numPlayoffTeams) || numPlayoffTeams < 2 || numPlayoffTeams > teams.length) {
+                    return; // No playoffs to render
+                }
+
+                // Ensure the number of teams is a power of 2 for a simple bracket
+                if ((numPlayoffTeams & (numPlayoffTeams - 1)) !== 0) {
+                    statusMessage.textContent += ' Playoff teams must be a power of 2 (e.g., 2, 4, 8).';
+                    return;
+                }
+
+                playoffOutput.innerHTML = `<h2 class="text-2xl font-bold text-gray-900 mb-4 mt-8">Postseason Bracket (${numPlayoffTeams} Teams)</h2>`;
+                
+                let currentRoundTeams = Array.from({ length: numPlayoffTeams }, (_, i) => `Seed #${i + 1}`);
+                let roundNum = 1;
+
+                while (currentRoundTeams.length >= 2) { // e.g., 8 -> 4 -> 2
+                    const roundDiv = document.createElement('div');
+                    const roundName = currentRoundTeams.length === 2 ? 'Championship' : `Round ${roundNum}`;
+                    roundDiv.className = 'week-block p-4 bg-white rounded-lg border border-gray-200 mb-6';
+                    roundDiv.innerHTML = `<h3 class="text-lg font-bold text-emerald-600 mb-3">${roundName}</h3>`;
+
+                    for (let i = 0; i < currentRoundTeams.length / 2; i++) {
+                        // With reseeding, the highest remaining seed always plays the lowest remaining seed.
+                        const homeSeed = (i === 0) ? "Highest Remaining Seed" : `${i + 1}nd Highest Remaining Seed`;
+                        const awaySeed = (i === 0) ? "Lowest Remaining Seed" : `${i + 1}nd Lowest Remaining Seed`;
+                        
+                        const matchDiv = document.createElement('div');
+                        matchDiv.className = 'matchup p-3 mb-2 rounded-md';
+                        matchDiv.innerHTML = `<span class="font-bold text-gray-800">${awaySeed}</span> at <span class="font-bold text-gray-800">${homeSeed}</span>`;
+                        roundDiv.appendChild(matchDiv);
+                    }
+                    playoffOutput.appendChild(roundDiv);
+                    currentRoundTeams = Array.from({ length: currentRoundTeams.length / 2 }); // Halve the number of teams for the next round
+                    roundNum++;
+                }
+            }
+
+            // --- CSV Export Logic ---
+            function exportScheduleToCSV() {
+                if (!currentScheduleData) {
+                    console.error("No schedule data available to export.");
+                    return;
+                }
+
+                const { teams, schedule } = currentScheduleData;
+                const numGames = parseInt(numGamesInput.value, 10);
+                const scheduleToExport = schedule.slice(0, numGames);
+                const startDate = startDateInput.value ? new Date(startDateInput.value + 'T00:00:00') : null;
+
+                let csvRows = ['Type,Round/Week,Date,Home Team,Away Team'];
+
+                // 1. Add Regular Season Games
+                scheduleToExport.forEach((weekMatchups, index) => {
+                    const weekNum = index + 1;
+                    let gameDateStr = '';
+                    if (startDate) {
+                        const gameDate = new Date(startDate.getTime());
+                        gameDate.setDate(startDate.getDate() + (index * 7));
+                        gameDateStr = gameDate.toLocaleDateString();
+                    }
+                    weekMatchups.forEach(matchup => {
+                        if (!matchup.isBye) {
+                            csvRows.push(`"Regular Season","${weekNum}","${gameDateStr}","${matchup.home}","${matchup.away}"`);
+                        }
+                    });
+                });
+
+                // 2. Add Postseason Games
+                const numPlayoffTeamsInput = document.getElementById('numPlayoffTeams');
+                let numPlayoffTeams = parseInt(numPlayoffTeamsInput.value, 10);
+
+                if (!isNaN(numPlayoffTeams) && numPlayoffTeams >= 2 && numPlayoffTeams <= teams.length && (numPlayoffTeams & (numPlayoffTeams - 1)) === 0) {
+                    let currentRoundTeams = Array.from({ length: numPlayoffTeams }, (_, i) => `Seed #${i + 1}`);
+                    let roundNum = 1;
+                    let lastRegularWeek = scheduleToExport.length;
+
+                    while (currentRoundTeams.length >= 2) {
+                        const roundName = currentRoundTeams.length === 2 ? 'Championship' : `Round ${roundNum}`;
+                        let playoffDateStr = '';
+                        if (startDate) {
+                            const playoffDate = new Date(startDate.getTime());
+                            // Playoffs start after the regular season
+                            playoffDate.setDate(startDate.getDate() + ((lastRegularWeek + roundNum - 1) * 7));
+                            playoffDateStr = playoffDate.toLocaleDateString();
+                        }
+                        // With reseeding, the matchups are generic after the first round.
+                        for (let i = 0; i < currentRoundTeams.length / 2; i++) {
+                            const homeSeed = (roundNum === 1) ? `Seed #${i + 1}` : `${i + 1}nd Highest Remaining Seed`;
+                            const awaySeed = (roundNum === 1) ? `Seed #${currentRoundTeams.length - i}` : `${i + 1}nd Lowest Remaining Seed`;
+                            csvRows.push(`"Playoffs","${roundName}","${playoffDateStr}","${homeSeed}","${awaySeed}"`);
+                        }
+                        currentRoundTeams = Array.from({ length: currentRoundTeams.length / 2 }); // Halve teams for next round
+                        roundNum++;
+                    }
+                }
+
+                const csvContent = csvRows.join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", "football_schedule.csv");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+
+
+            // --- Event Listener ---
+            exportBtn.addEventListener('click', exportScheduleToCSV);
+
+            generateBtn.addEventListener('click', () => {
+                const rawNames = teamNamesInput.value.trim();
+                currentScheduleData = null; // Reset data on new generation
+                exportBtn.classList.add('hidden');
+
+                if (!rawNames) {
+                    statusMessage.textContent = 'Please enter team names.';
+                    return;
+                }
+                
+                // Clean and filter team names
+                const teams = rawNames
+                    .split('\n')
+                    .map(name => name.trim())
+                    .filter(name => name.length > 0);
+
+                if (teams.length < 2) {
+                    statusMessage.textContent = 'You need at least two teams to generate a schedule.';
+                    scheduleOutput.innerHTML = '';
+                    scheduleOutput.innerHTML = '<p class="text-gray-500 italic">Enter your teams and click "Generate Schedule" to see the full season\'s matchups.</p>';
+                    return;
+                }
+                
+                const numGames = parseInt(numGamesInput.value, 10);
+                const maxGames = teams.length % 2 !== 0 ? teams.length : teams.length - 1;
+                if (isNaN(numGames) || numGames <= 0) {
+                    statusMessage.textContent = 'Please enter a valid number of games.';
+                    return;
+                } else if (numGames > maxGames) {
+                    statusMessage.textContent = `For ${teams.length} teams, the maximum is ${maxGames} games.`;
+                    return;
+                }
+
+                try {
+                    const scheduleData = generateRoundRobin([...teams]); // Use a copy for manipulation
+                    currentScheduleData = scheduleData; // Store for export
+                    renderSchedule(scheduleData); // Renders the regular season
+                    renderPlayoffs(teams); // Renders the postseason
+                } catch (error) {
+                    console.error("Scheduling error:", error);
+                    statusMessage.textContent = 'An error occurred during schedule generation. Check console for details.';
+                    scheduleOutput.innerHTML = '<p class="text-red-500">Could not generate schedule. Please check your team list format.</p>';
+                }
+            });
+
+        });
+    </script>
+</body>
+</html>
